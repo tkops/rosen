@@ -1,0 +1,15 @@
+apiVersion: v2
+version: v1.0.0
+appVersion: v1.1.0
+name: argocd-apps
+description: Rosen ArgoCD Applications for OpenShift
+kubeVersion: ">= v1.25"
+type: application
+
+sources:
+  - https://gitea.roseninspection.net/CMP-OpenShift/k8s-argocd-apps
+maintainers:
+  - name: Thorsten de Vos
+    email: tdevos@rosen-group.com
+  - name: Tobias Derksen
+    email: tderksen@rosen-group.com
