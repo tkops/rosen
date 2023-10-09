@@ -1,0 +1,79 @@
+{{- if empty .Values.clustername }}
+{{- fail "Missing require value clustername" }}
+{{- end }}
+{{- if empty .Values.stage }}
+{{- fail "Missing require value stage "}}
+{{- end }}
+
+{{- range $name, $app := .Values.applications }}
+{{- if $app.enabled }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: {{ $name | lower }}
+  namespace: {{ $.Values.namespace }}
+  {{- if $app.wave }}
+  annotations:
+    argocd.argoproj.io/wave: {{ $app.wave | quote }}
+  {{- end }}
+  labels:
+    {{- toYaml $.Values.labels | nindent 4 }}
+spec:
+  {{- if $app.ignoreDifferences }}
+  ignoreDifferences:
+    {{- toYaml $app.ignoreDifferences | nindent 4 }}
+  {{- end }}
+
+  destination:
+    {{- if $app.namespace }}
+    namespace: {{ $app.namespace }}
+    {{- end }}
+    server: https://kubernetes.default.svc
+  project: {{ $app.project | default "default" }}
+
+  {{- if $app.syncPolicy }}
+  syncPolicy:
+    {{- toYaml $app.syncPolicy | nindent 4 }}
+  {{- end }}
+
+  {{- if $app.sources }}
+  sources:
+  {{- range $source := $app.sources }}
+    {{- $repo := get $.Values.repositories $source.repoURL }}
+    {{- if $repo }}
+    - repoURL: {{ $repo.repoURL }}
+    {{- else }}
+    - repoURL: {{ $source.repoURL }}
+    {{- end }}
+      {{- if not $source.chart }}
+      targetRevision: {{ tpl (coalesce $source.targetRevision $repo.targetRevision "HEAD") $ }}
+      path: {{ tpl (default "." $source.path) $ }}
+      {{- else }}
+      chart: {{ $source.chart }}
+      targetRevision: {{ tpl (coalesce $source.revision $source.targetRevision) $ }}
+      {{- end }}
+      {{- if $source.ref }}
+      ref: {{ $source.ref }}
+      {{- end }}
+      {{- if $source.helm }}
+      helm:
+        {{- if $source.helm.valueFiles }}
+        valueFiles:
+          {{- tpl (toYaml $source.helm.valueFiles) $ | nindent 10 }}
+        {{- end }}
+        {{- if $source.helm.values }}
+        values: |
+          {{- tpl $source.helm.values $ | nindent 10 }}
+        {{- end }}
+        {{- if $source.helm.parameters }}
+        parameters:
+        {{- tpl (toYaml $source.helm.parameters) $ | nindent 10 }}
+        {{- end }}
+      {{- end }}
+
+  {{- end }}
+  {{- end }}
+
+{{- end }}
+{{- end }}

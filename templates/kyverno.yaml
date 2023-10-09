@@ -1,0 +1,186 @@
+{{- $extraExcludedNamespaces := .Values.kyverno.excludedNamespaces }}
+{{- if .Values.logging.enabled }}
+{{- $extraExcludedNamespaces = append $extraExcludedNamespaces "openshift-logging" }}
+{{- end }}
+{{- if  .Values.networkLogging.enabled }}
+{{- $extraExcludedNamespaces = concat $extraExcludedNamespaces (list "netobserv" "netobserv-privileged") }}
+{{- end }}
+{{- if  .Values.gpuOperator.enabled }}
+{{- $extraExcludedNamespaces = append $extraExcludedNamespaces "nvidia-gpu-operator" }}
+{{- end }}
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  annotations:
+    argocd.argoproj.io/wave: '4'
+  namespace: {{ .Values.namespace }}
+  name: kyverno
+  labels:
+    {{- toYaml $.Values.labels | nindent 4 }}
+spec:
+  destination:
+    namespace: kyverno
+    server: 'https://kubernetes.default.svc'
+  project: default
+  sources:
+    - chart: kyverno
+      helm:
+        values: |
+          replicaCount: 3
+          namespace: kyverno
+          customLabels:
+            component: kyverno
+          extraArgs:
+          - '--backgroundScan=false'
+          - '--admissionReports=false'
+          image:
+            registry: {{ .Values.kyverno.images.registry }}
+            repository: {{ .Values.kyverno.images.image }}
+          initImage:
+            registry: {{ .Values.kyverno.images.registry }}
+            repository: {{ .Values.kyverno.images.initImage }}
+          serviceMonitor:
+            enabled: true
+          cleanupController:
+            enabled: false
+          nodeSelector:
+            node-role.kubernetes.io/master: ''
+          tolerations:
+            - key: node-role.kubernetes.io/master
+              effect: NoSchedule
+          resources:
+          {{- toYaml .Values.kyverno.resources | nindent 12 }}
+          config:
+            resourceFilters:
+            - '[*,kyverno,*]'
+            - '[*,kube-system,*]'
+            - '[*,kube-public,*]'
+            - '[*,kube-node-lease,*]'
+            - '[*,kube-*,*]'
+            - '[*,cyberark-conjur,*]'
+            - '[*,openshift*,*]'
+            - '[Event,*,*]'
+            - '[Node,*,*]'
+            - '[APIService,*,*]'
+            - '[TokenReview,*,*]'
+            - '[SubjectAccessReview,*,*]'
+            - '[SelfSubjectAccessReview,*,*]'
+            - '[Binding,*,*]'
+            - '[ReplicaSet,*,*]'
+            - '[ReplicationController,*,*]'
+            - '[AdmissionReport,*,*]'
+            - '[ClusterAdmissionReport,*,*]'
+            - '[BackgroundScanReport,*,*]'
+            - '[ClusterBackgroundScanReport,*,*]'
+            - '[OAuthAccessToken,*,*]'
+            - '[UserOAuthAccessToken,*,*]'
+            - '[ClusterRole,*,kyverno:*]'
+            - '[ClusterRoleBinding,*,kyverno:*]'
+            - '[ConfigMap,*,kube-root-ca.crt]'
+            - '[ConfigMap,*,openshift-service-ca.crt]'
+            - '[PersistentVolume,*,*]'
+            webhooks:
+              - namespaceSelector:
+                  matchExpressions:
+                    - key: kubernetes.io/metadata.name
+                      operator: NotIn
+                      values:
+                        {{- range $extraExcludedNamespaces }}
+                        - {{ . }}
+                        {{- end }}
+                        - cert-utils-operator
+                        - kyverno
+                        - px-central
+                        - portworx
+                        - cert-manager
+                        - cert-manager-operator
+                        - kube-node-lease
+                        - kube-public
+                        - kube-system
+                        - openshift
+                        - openshift-apiserver
+                        - openshift-apiserver-operator
+                        - openshift-authentication
+                        - openshift-authentication-operator
+                        - openshift-cloud-controller-manager
+                        - openshift-cloud-controller-manager-operator
+                        - openshift-cloud-credential-operator
+                        - openshift-cloud-network-config-controller
+                        - openshift-cluster-csi-drivers
+                        - openshift-cluster-machine-approver
+                        - openshift-cluster-node-tuning-operator
+                        - openshift-cluster-samples-operator
+                        - openshift-cluster-storage-operator
+                        - openshift-cluster-version
+                        - openshift-config
+                        - openshift-config-managed
+                        - openshift-config-operator
+                        - openshift-console
+                        - openshift-console-operator
+                        - openshift-console-user-settings
+                        - openshift-controller-manager
+                        - openshift-controller-manager-operator
+                        - openshift-dns
+                        - openshift-dns-operator
+                        - openshift-etcd
+                        - openshift-etcd-operator
+                        - openshift-gitops
+                        - openshift-host-network
+                        - openshift-image-registry
+                        - openshift-infra
+                        - openshift-ingress
+                        - openshift-ingress-canary
+                        - openshift-ingress-operator
+                        - openshift-insights
+                        - openshift-kni-infra
+                        - openshift-kube-apiserver
+                        - openshift-kube-apiserver-operator
+                        - openshift-kube-controller-manager
+                        - openshift-kube-controller-manager-operator
+                        - openshift-kube-scheduler
+                        - openshift-kube-scheduler-operator
+                        - openshift-kube-storage-version-migrator
+                        - openshift-kube-storage-version-migrator-operator
+                        - openshift-logging
+                        - openshift-machine-api
+                        - openshift-machine-config-operator
+                        - openshift-marketplace
+                        - openshift-monitoring
+                        - openshift-multus
+                        - openshift-netobserv-operator
+                        - openshift-network-diagnostics
+                        - openshift-network-operator
+                        - openshift-nfd
+                        - openshift-node
+                        - openshift-nutanix-infra
+                        - openshift-oauth-apiserver
+                        - openshift-openstack-infra
+                        - openshift-operator-lifecycle-manager
+                        - openshift-operators
+                        - openshift-operators-redhat
+                        - openshift-ovirt-infra
+                        - openshift-ovn-kubernetes
+                        - openshift-route-controller-manager
+                        - openshift-service-ca
+                        - openshift-service-ca-operator
+                        - openshift-user-workload-monitoring
+                        - openshift-vsphere-infra
+          securityContext:
+            seccompProfile: null
+          podSecurityContext:
+            seccompProfile: null
+      repoURL: 'https://artifactory.roseninspection.net:443/artifactory/helm-cmp/'
+      targetRevision: {{ .Values.versions.kyverno }}
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 2h
+      limit: 15
+    syncOptions:
+      - ServerSideApply=true
+      - Replace=true

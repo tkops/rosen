@@ -1,0 +1,18 @@
+{{- $namespaces := concat .Values.managedNamespaces .Values.additionalManagedNamespaces }}
+{{- if .Values.logging.enabled }}
+{{- $namespaces = append $namespaces "openshift-logging" }}
+{{- end }}
+{{- if  .Values.networkLogging.enabled }}
+{{- $namespaces = concat $namespaces (list "netobserv" "netobserv-privileged") }}
+{{- end }}
+{{- range $ns := $namespaces }}
+---
+kind: Namespace
+apiVersion: v1
+metadata:
+  name: {{ $ns }}
+  labels:
+    openshift.io/cluster-monitoring: 'true'
+  annotations:
+    openshift.io/node-selector: ''
+{{- end }}
