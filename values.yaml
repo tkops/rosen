@@ -1,0 +1,407 @@
+clustername: ""
+generatedName: ""
+location: "lin"
+namespace: openshift-gitops
+stage: stable
+policies: "" # Optional parameter to overwrite kyverno policies
+
+versions:
+  kyverno: v2.7.2
+
+# Automatically created namespaces
+managedNamespaces:
+  - cert-manager
+  - kyverno
+  - openshift-gitops
+  - portworx
+  - cyberark-conjur
+  - kemp-sync
+  - cert-utils-operator
+  - cert-manager-operator
+
+# additional namespaces per cluster
+additionalManagedNamespaces: []
+
+# Common labels
+labels:
+  app: argocd
+
+logging:
+  enabled: false
+
+networkLogging:
+  enabled: false
+
+gpuOperator:
+  enabled: false
+
+kyverno:
+  excludedNamespaces: []
+  images:
+    registry: docker-cmp.artifactory.roseninspection.net
+    image: kyverno/kyverno
+    initImage: kyverno/kyvernopre
+  resources:
+    limits:
+      memory: 2Gi
+    requests:
+      cpu: 500m
+      memory: 1Gi
+
+# todo splunk
+
+repositories:
+  helm:
+    repoURL: https://artifactory.roseninspection.net:443/artifactory/helm-cmp/
+    type: helm
+    insecure: true
+  versions:
+    repoURL: https://gitea.roseninspection.net:8090/CMP-OpenShift/cluster-versions.git
+    insecure: true
+    targetRevision: HEAD
+  platform-config:
+    repoURL: https://gitea.roseninspection.net:8090/CMP-OpenShift/k8s-openshift-platform-config.git
+    insecure: true
+  portworx:
+    repoURL: https://gitea.roseninspection.net:8090/CMP-OpenShift/k8s-portworx.git
+    insecure: true
+  kyvernopolicies:
+    repoURL: https://gitea.roseninspection.net:8090/CMP-OpenShift/k8s-kyverno.git
+    insecure: true
+  external-dns:
+    repoURL: https://gitea.roseninspection.net:8090/Container_Management_Plattform/K8S_external-dns.git
+    insecure: true
+  cert-manager:
+    repoURL: https://gitea.roseninspection.net:8090/CMP-OpenShift/k8s-cert-manager.git
+    insecure: true
+  msteams:
+    repoURL: https://gitea.roseninspection.net:8090/CMP-OpenShift/k8s-ocp-teams-notification.git
+    insecure: true
+  jenkins:
+    repoURL: https://gitea.roseninspection.net:8090/CMP-OpenShift/k8s-jenkins-agent.git
+    insecure: true
+  nsrequests:
+    repoURL: https://gitea.roseninspection.net:8090/CMP-OpenShift/k8s-namespace-requests.git
+    insecure: true
+  requests:
+    repoURL: https://gitea.roseninspection.net:8090/CMP-OpenShift/k8s-generated-requests.git
+    insecure: true
+  keycloak:
+    repoURL: https://gitea.roseninspection.net:8090/CMP-OpenShift/k8s-keycloak.git
+    insecure: true
+  kemp-sync:
+    repoURL: https://gitea.roseninspection.net:8090/CMP-OpenShift/k8s-kemp-sync.git
+    insecure: true
+  matchbox:
+    repoURL: https://gitea.roseninspection.net:8090/CMP-OpenShift/k8s-matchbox.git
+    insecure: true
+  gpu-dashboard:
+    repoURL: https://gitea.roseninspection.net:8090/CMP-OpenShift/k8s-nvidia-gpu-dashboard.git
+    insecure: true
+  grafana:
+    repoURL: https://gitea.roseninspection.net:8090/CMP-OpenShift/k8s-grafana.git
+    insecure: true
+  conjur-follower:
+    repoURL: https://gitea.roseninspection.net:8090/CMP-OpenShift/k8s-conjur.git
+    insecure: true
+
+applications:
+  platform-config:
+    enabled: true
+    namespace: openshift-config
+    wave: 2
+    sources:
+      - helm:
+          parameters:
+            - name: generatedName
+              value: "{{ .Values.generatedName }}"
+          valueFiles:
+            - values.yaml
+            - $versions/defaults/authentication.yaml
+            - $versions/defaults/components.yaml
+            - $versions/defaults/images.yaml
+            - $versions/defaults/monitoring.yaml
+            - $versions/defaults/nodes.yaml
+            - $versions/defaults/versions.yaml
+            - $versions/openshift/{{ .Values.stage }}/stage.yaml
+            - $versions/openshift/{{ .Values.stage }}/{{ .Values.location }}/location.yaml
+            - $versions/openshift/{{ .Values.stage }}/{{ .Values.location }}/{{ .Values.clustername }}/config.yaml
+            - $versions/openshift/{{ .Values.stage }}/{{ .Values.location }}/{{ .Values.clustername }}/common.yaml
+            - $versions/openshift/{{ .Values.stage }}/{{ .Values.location }}/{{ .Values.clustername }}/versions.yaml
+            - $requests/{{ .Values.clustername }}/groups.yaml
+        path: .
+        repoURL: platform-config
+      - ref: versions
+        repoURL: versions
+      - ref: requests
+        repoURL: requests
+    syncPolicy:
+      automated:
+        selfHeal: true
+      retry:
+        limit: 15
+        backoff:
+          duration: 15s
+          factor: 2
+          maxDuration: 2h
+    ignoreDifferences: # Ignore automatically generated config maps
+      - kind: ConfigMap
+        name: custom-logo
+        namespace: openshift-console
+        jsonPointers:
+          - /data
+          - /binaryData
+      - kind: ConfigMap
+        name: openshift-user-ca
+        namespace: openshift-controller-manager
+        jsonPointers:
+          - /data
+          - /binaryData
+      - kind: ClusterVersion
+        group: config.openshift.io
+        name: version
+        jsonPointers:
+          - /spec/channel
+          - /spec/clusterID
+          - /spec/desiredUpdate
+
+  keycloak:
+    enabled: true
+    namespace: sso
+    wave: 3
+    sources:
+      - helm:
+          parameters:
+            - name: generatedName
+              value: "{{ .Values.generatedName }}"
+            - name: clustername
+              value: "{{ .Values.clustername }}"
+            - name: location
+              value: "{{ .Values.location }}"
+            - name: namespace
+              value: sso
+        path: helm_chart
+        repoURL: keycloak
+    syncPolicy:
+      automated:
+        selfHeal: true
+      retry:
+        limit: 15
+        backoff:
+          duration: 15s
+          factor: 2
+          maxDuration: 2h
+
+  namespace-requests:
+    enabled: true
+    namespace: openshift
+    wave: 5
+    sources:
+      - helm:
+          valueFiles:
+            - values.yaml
+            - $versions/openshift/{{ .Values.stage }}/stage.yaml
+            - $versions/openshift/{{ .Values.stage }}/{{ .Values.location }}/location.yaml
+            - $versions/openshift/{{ .Values.stage }}/{{ .Values.location }}/{{ .Values.clustername }}/common.yaml
+            - $versions/defaults/ns-requests.yaml
+            - $versions/defaults/authentication.yaml
+            - $requests/{{ .Values.clustername }}/requests.yaml
+        path: .
+        repoURL: nsrequests
+      - ref: versions
+        repoURL: versions
+      - ref: requests
+        repoURL: requests
+    syncPolicy:
+      automated:
+        selfHeal: true
+      retry:
+        limit: 15
+        backoff:
+          duration: 15s
+          factor: 2
+          maxDuration: 2h
+
+  portworx:
+    enabled: true
+    wave: 5
+    namespace: portworx
+    sources:
+      - helm:
+          parameters:
+            - name: generatedName
+              value: "{{ .Values.generatedName }}"
+          valueFiles:
+            - values.yaml
+            - $versions/openshift/{{ .Values.stage }}/stage.yaml
+            - $versions/openshift/{{ .Values.stage }}/{{ .Values.location }}/location.yaml
+            - $versions/openshift/{{ .Values.stage }}/{{ .Values.location }}/{{ .Values.clustername }}/config.yaml
+            - $versions/openshift/{{ .Values.stage }}/{{ .Values.location }}/{{ .Values.clustername }}/common.yaml
+            - $versions/openshift/{{ .Values.stage }}/{{ .Values.location }}/{{ .Values.clustername }}/versions.yaml
+        path: .
+        repoURL: portworx
+      - ref: versions
+        repoURL: versions
+
+  kyvernopolicies:
+    enabled: true
+    wave: 5
+    namespace: kyverno
+    project: default
+    policies: ""
+    sources:
+      - repoURL: kyvernopolicies
+        path: policies/overlays/{{ default .Values.stage .Values.policies }}
+    syncPolicy:
+      automated:
+        selfHeal: true
+        prune: true
+      syncOptions:
+        - ServerSideApply=true
+      retry:
+        limit: 15
+        backoff:
+          duration: 15s
+          factor: 2
+          maxDuration: 2h
+
+  externaldns:
+    enabled: false
+    sources:
+      - repoURL: external-dns
+    syncPolicy:
+      automated:
+        selfHeal: true
+      retry:
+        limit: 15
+        backoff:
+          duration: 15s
+          factor: 2
+          maxDuration: 2h
+
+  cert-manager:
+    enabled: true
+    namespace: cert-manager
+    sources:
+      - repoURL: cert-manager
+        path: .
+        helm:
+          parameters:
+            - name: gitopsNamespace
+              value: "{{ .Values.namespace }}"
+          valueFiles:
+            - values.yaml
+            - $versions/openshift/{{ .Values.stage }}/stage.yaml
+            - $versions/openshift/{{ .Values.stage }}/{{ .Values.location }}/location.yaml
+            - $versions/openshift/{{ .Values.stage }}/{{ .Values.location }}/{{ .Values.clustername }}/common.yaml
+            - $versions/openshift/{{ .Values.stage }}/{{ .Values.location }}/{{ .Values.clustername }}/config.yaml
+            - $versions/openshift/{{ .Values.stage }}/{{ .Values.location }}/{{ .Values.clustername }}/versions.yaml
+      - ref: versions
+        repoURL: versions
+    syncPolicy:
+      automated:
+        selfHeal: true
+      retry:
+        limit: 15
+        backoff:
+          duration: 15s
+          factor: 2
+          maxDuration: 2h
+      syncOptions:
+        - ServerSideApply=true
+
+  jenkins:
+    enabled: false
+    namespace: jenkins
+    sources:
+      - repoURL: jenkins
+        path: base
+    syncPolicy:
+      automated:
+        selfHeal: true
+      retry:
+        limit: 15
+        backoff:
+          duration: 15s
+          factor: 2
+          maxDuration: 2h
+
+  matchbox:
+    enabled: false
+    namespace: matchbox
+    sources:
+      - helm:
+        parameters:
+          - name: generatedName
+            value: "{{ .Values.generatedName }}"
+        valueFiles:
+          - values.yaml
+        path: .
+        repoURL: matchbox
+    syncPolicy:
+      automated:
+        selfHeal: true
+      retry:
+        limit: 15
+        backoff:
+          duration: 15s
+          factor: 2
+          maxDuration: 2h
+
+  msteams:
+    enabled: true
+    namespace: openshift-monitoring
+    sources:
+      - repoURL: helm
+        chart: prometheus-msteams
+        targetRevision: "{{ .Values.versions.msteams }}"
+        helm:
+          valueFiles:
+            - $msteams/values.yaml
+      - repoURL: msteams
+        ref: msteams
+        targetRevision: HEAD
+    syncPolicy:
+      automated:
+        selfHeal: true
+      retry:
+        limit: 15
+        backoff:
+          duration: 15s
+          factor: 2
+          maxDuration: 2h
+
+  kemp-sync:
+    enabled: true
+    namespace: kemp-sync
+    sources:
+      - helm:
+          parameters:
+            - name: generatedName
+              value: "{{ .Values.generatedName }}"
+          valueFiles:
+            - values.yaml
+            - $versions/openshift/{{ .Values.stage }}/stage.yaml
+            - $versions/openshift/{{ .Values.stage }}/{{ .Values.location }}/location.yaml
+            - $versions/openshift/{{ .Values.stage }}/{{ .Values.location }}/{{ .Values.clustername }}/config.yaml
+            - $versions/openshift/{{ .Values.stage }}/{{ .Values.location }}/{{ .Values.clustername }}/common.yaml
+            - $versions/openshift/{{ .Values.stage }}/{{ .Values.location }}/{{ .Values.clustername }}/versions.yaml
+        path: .
+        repoURL: kemp-sync
+      - ref: versions
+        repoURL: versions
+
+  gpu-dashboard:
+    enabled: false
+    namespace: nvidia-gpu-operator
+    sources:
+      - repoURL: gpu-dashboard
+    syncPolicy:
+      automated:
+        selfHeal: true
+      retry:
+        limit: 15
+        backoff:
+          duration: 15s
+          factor: 2
+          maxDuration: 2h
